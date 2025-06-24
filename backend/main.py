@@ -43,7 +43,7 @@ db_config = {
 }
 
 # API Claude (tu configuración actual)
-client = anthropic.Anthropic(api_key="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")
+client = anthropic.Anthropic(api_key="")
 
 # === TU ESTRUCTURA Y CONTEXTO ORIGINAL ===
 
