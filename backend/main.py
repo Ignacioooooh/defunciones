@@ -43,7 +43,7 @@ db_config = {
 }
 
 # API Claude (tu configuración actual)
-client = anthropic.Anthropic(api_key="")
+client = anthropic.Anthropic(api_key="ANTHROPIC_API_KEY")
 
 # === TU ESTRUCTURA Y CONTEXTO ORIGINAL ===
 
@@ -226,8 +226,114 @@ class ContextoConversacion:
         return any(palabra in pregunta_lower for palabra in palabras_continuacion)
     
     def expandir_pregunta_continuacion(self, pregunta):
-        """Expandir preguntas de continuación usando el contexto"""
+        """Expandir preguntas de continuación usando el contexto - VERSIÓN MEJORADA"""
         pregunta_lower = pregunta.lower()
+        
+        # NUEVO: Detectar preguntas ultra-cortas que necesitan contexto completo
+        preguntas_cortas = ['cuántos?', 'cuántas?', 'cuántos', 'cuántas', 'qué cantidad?', 'total?', 'cantidad?', 'y en que mes hubo mas muerte?', 'y en qué mes hubo más muerte?', 'en que mes hubo mas muertes?', 'qué mes tuvo más muertes?']
+        
+        if any(p in pregunta_lower for p in preguntas_cortas):
+            print(f"🧠 DEBUG - Detectada pregunta corta: '{pregunta}'")
+            
+            # Construir pregunta completa basada en el contexto
+            if self.historial_sesion:
+                # Analizar la pregunta anterior para extraer contexto
+                ultima_pregunta = self.historial_sesion[-1]['pregunta'].lower()
+                print(f"🧠 DEBUG - Última pregunta: '{ultima_pregunta}'")
+                
+                # Analizar también la respuesta anterior si existe
+                ultima_respuesta = ""
+                if len(self.historial_sesion) >= 1:
+                    # Buscar en el historial la última respuesta que mencionó un mes
+                    for item in reversed(self.historial_sesion[-3:]):  # Últimas 3 interacciones
+                        respuesta_str = str(item).lower()
+                        for mes in ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']:
+                            if mes in respuesta_str:
+                                ultima_respuesta = respuesta_str
+                                print(f"🧠 DEBUG - Encontrado mes '{mes}' en respuesta anterior")
+                                break
+                        if ultima_respuesta:
+                            break
+                
+                # CASO 1: Si la pregunta anterior tenía año y mes específicos
+                if any(año in ultima_pregunta for año in ['2023', '2024', '2025']):
+                    año_encontrado = None
+                    for año in ['2023', '2024', '2025']:
+                        if año in ultima_pregunta:
+                            año_encontrado = año
+                            break
+                    
+                    # Buscar mes en pregunta anterior
+                    mes_encontrado = None
+                    for mes in ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']:
+                        if mes in ultima_pregunta:
+                            mes_encontrado = mes
+                            break
+                    
+                    # Si encontramos año y mes
+                    if año_encontrado and mes_encontrado:
+                        expansion = f"cuántas defunciones hubo en {mes_encontrado} de {año_encontrado}"
+                        print(f"🧠 DEBUG - Expansión: '{expansion}'")
+                        return expansion
+                    
+                    # Si solo encontramos año
+                    elif año_encontrado:
+                        expansion = f"cuántas defunciones hubo en {año_encontrado}"
+                        print(f"🧠 DEBUG - Expansión: '{expansion}'")
+                        return expansion
+                
+                # CASO 2: Si la respuesta anterior mencionó un mes específico
+                if ultima_respuesta:
+                    for mes in ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']:
+                        if mes in ultima_respuesta:
+                            # ARREGLO: Detectar año dinámicamente del contexto actual
+                            año_contexto = self.sesion_actual.get('ultimo_año')
+                            if not año_contexto:
+                                # Si no hay año en sesión actual, buscar en historial
+                                for año in ['2023', '2024', '2025']:
+                                    if año in ultima_respuesta or año in ultima_pregunta:
+                                        año_contexto = año
+                                        break
+                                # Si aún no encuentra año, usar 2024 por defecto
+                                if not año_contexto:
+                                    año_contexto = "2024"
+                            
+                            expansion = f"cuántas defunciones hubo en {mes} de {año_contexto}"
+                            print(f"🧠 DEBUG - Expansión desde respuesta: '{expansion}' (año detectado: {año_contexto})")
+                            return expansion
+                
+                # CASO 3: Si hay contexto de región activo
+                if self.sesion_actual['ultima_region']:
+                    año_activo = self.sesion_actual.get('ultimo_año', '2024')
+                    if self.sesion_actual['ultimo_año']:
+                        expansion = f"cuántas defunciones hubo en {self.sesion_actual['ultima_region']} en {año_activo}"
+                    else:
+                        expansion = f"cuántas defunciones hubo en {self.sesion_actual['ultima_region']}"
+                    print(f"🧠 DEBUG - Expansión con región: '{expansion}' (año: {año_activo})")
+                    return expansion
+                
+                # CASO 4: Si hay contexto de causa activo
+                if self.sesion_actual['ultima_causa']:
+                    año_activo = self.sesion_actual.get('ultimo_año', '2024')
+                    if self.sesion_actual['ultimo_año']:
+                        expansion = f"cuántas muertes por {self.sesion_actual['ultima_causa']} hubo en {año_activo}"
+                    else:
+                        expansion = f"cuántas muertes por {self.sesion_actual['ultima_causa']} hubo"
+                    print(f"🧠 DEBUG - Expansión con causa: '{expansion}' (año: {año_activo})")
+                    return expansion
+                
+                # CASO 5: NUEVO - Detectar preguntas sobre "qué mes tuvo más muertes"
+                if any(patron in pregunta_lower for patron in ['en que mes', 'qué mes', 'mes hubo mas', 'mes tuvo más']):
+                    año_activo = self.sesion_actual.get('ultimo_año', '2024')
+                    expansion = f"en qué mes de {año_activo} hubo más defunciones"
+                    print(f"🧠 DEBUG - Expansión mes con más muertes: '{expansion}' (año: {año_activo})")
+                    return expansion
+            
+            # Si no hay contexto específico, pregunta general
+            print(f"🧠 DEBUG - Sin contexto específico, usando pregunta general")
+            return "cuántas defunciones hay en total"
+        
+        # CÓDIGO ORIGINAL PARA OTROS TIPOS DE PREGUNTAS...
         
         # Detectar referencias temporales como "de este último", "de ese mes", "de este período"
         referencias_temporales = ['de este último', 'de ese', 'de este', 'del último', 'del mes', 'de ese período']
@@ -330,7 +436,7 @@ class ContextoConversacion:
                     partes.append("muertes")
                 partes.append("en mujeres")
                 if self.sesion_actual['ultima_region']:
-                    partes.append(f"en {self.sesion_actual['ultima_region']}")
+                    partes.append(f"en {self.sesion_actual['ultima_región']}")
                 return " ".join(partes)
             
             elif 'qué tal en' in pregunta_lower:
@@ -820,7 +926,7 @@ async def chat(message: ChatMessage, user_id: int = Depends(get_current_user)):
 
 @app.get("/conversations")
 async def get_conversations(user_id: int = Depends(get_current_user)):
-    """Obtener conversaciones del usuario"""
+    """Obtener conversaciones del usuario - ARREGLADO PARA FRONTEND"""
     try:
         conn = psycopg2.connect(**db_config)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -833,7 +939,8 @@ async def get_conversations(user_id: int = Depends(get_current_user)):
         cur.close()
         conn.close()
         
-        return [dict(conv) for conv in conversations]
+        # CAMBIO: Envolver en objeto para que coincida con frontend
+        return {"conversations": [dict(conv) for conv in conversations]}
     except psycopg2.Error as err:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
 
@@ -861,7 +968,7 @@ async def get_conversation_messages(conversation_id: str, user_id: int = Depends
         cur.close()
         conn.close()
         
-        return [dict(msg) for msg in messages]
+        return {"messages": [dict(msg) for msg in messages]}
     except psycopg2.Error as err:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
 
@@ -921,35 +1028,40 @@ async def reset_context(user_id: int = Depends(get_current_user)):
 
 @app.get("/stats")
 async def get_stats():
-    """Estadísticas básicas del dataset (tu función original)"""
+    """Estadísticas básicas del dataset - MEJORADO"""
     try:
         conn = psycopg2.connect(**db_config)
         cur = conn.cursor()
         
         # Total defunciones
         cur.execute('SELECT COUNT(*) FROM defunciones_principales')
-        total = cur.fetchone()[0]
+        total_defunciones = cur.fetchone()[0]
         
-        # Regiones
+        # Total regiones
         cur.execute('SELECT COUNT(DISTINCT "NOMBRE_REGION") FROM ubicaciones')
-        regiones = cur.fetchone()[0]
+        total_regiones = cur.fetchone()[0]
         
-        # Período
-        cur.execute('SELECT MIN("ANIO"), MAX("ANIO") FROM defunciones_principales')
-        años = cur.fetchone()
+        # Total comunas
+        cur.execute('SELECT COUNT(DISTINCT "COMUNA") FROM ubicaciones')
+        total_comunas = cur.fetchone()[0]
         
-        # Por año
-        cur.execute('SELECT "ANIO", COUNT(*) FROM defunciones_principales GROUP BY "ANIO" ORDER BY "ANIO"')
-        por_año = cur.fetchall()
+        # Años disponibles
+        cur.execute('SELECT COUNT(DISTINCT "ANIO") FROM defunciones_principales')
+        total_anos = cur.fetchone()[0]
+        
+        # Años específicos
+        cur.execute('SELECT DISTINCT "ANIO" FROM defunciones_principales ORDER BY "ANIO"')
+        anos_lista = [str(row[0]) for row in cur.fetchall()]
         
         cur.close()
         conn.close()
         
         return {
-            "total_defunciones": total,
-            "total_regiones": regiones,
-            "periodo": {"inicio": años[0], "fin": años[1]},
-            "por_año": [{"año": año, "cantidad": cantidad} for año, cantidad in por_año]
+            "total_defunciones": total_defunciones,
+            "total_regiones": total_regiones,
+            "total_comunas": total_comunas,
+            "anios_disponibles": "-".join(anos_lista),
+            "total_anos": total_anos
         }
     except psycopg2.Error as err:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
@@ -968,7 +1080,7 @@ async def get_excluded_terms(user_id: int = Depends(get_current_user)):
         cur.close()
         conn.close()
         
-        return [dict(term) for term in terms]
+        return {"terms": [dict(term) for term in terms]}
     except psycopg2.Error as err:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
 
@@ -1019,7 +1131,7 @@ async def get_prompt_config(user_id: int = Depends(get_current_user)):
         cur.close()
         conn.close()
         
-        return dict(config) if config else {"message": "Sin configuración activa"}
+        return {"config": dict(config)} if config else {"message": "Sin configuración activa"}
     except psycopg2.Error as err:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
 

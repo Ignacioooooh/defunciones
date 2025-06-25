@@ -1,0 +1,22 @@
+# API Keys
+.env
+*.env
+backend/.env
+
+# Node modules
+frontend/node_modules/
+
+# Python
+backend/__pycache__/
+*.pyc
+
+# Builds
+frontend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
